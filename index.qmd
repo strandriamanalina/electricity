@@ -1,0 +1,148 @@
+---
+title: "analyse_frns"
+format: html
+---
+
+## Introduction
+
+Les enquêtes ont réalisées du 25 Juillet au 01 Août 2022.
+Décrire ici le contexte de réalisation des enquêtes :
+- Nombre d'enquêteurs
+- Nombre d'entreprises visitées
+
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(lubridate)
+library(gt)
+
+
+```
+
+
+
+## Retour des enquêteurs
+
+Quels ont été les difficultés rencontrés ?
+Quels sont les points à améliorer : d'un point de vue logistique, dans le questionnaire, du côté de WWF, du côté du comité de pilotage ? 
+Quelles sont les leçons apprises ? Comment faire la prochaine fois ?
+Qu'est-ce que les équipes de MUM ont appris durant le processus ?
+
+
+
+## Analyse préliminaire
+
+```{r}
+#| echo: false
+#| warning: false
+#| message: false
+
+
+frns <- read_excel(here::here("220803 - data fournisseur fnl.xlsx")) %>% 
+  clean_names() %>% 
+  mutate(appareils = str_replace_all(appareils, "_", " ")) %>% 
+  separate(puissance, into = c("p_min", "p_max"), sep = "à") %>% 
+  mutate(p_min = parse_number(p_min),
+         p_max = parse_number(p_max)) %>% 
+  mutate(p_mean = ifelse(is.na(p_max), p_min, (p_min+p_max)/2))
+
+valeurs_uniques <- frns %>% 
+  select(where(is.character)) %>% 
+  map(unique)
+
+# colnames(frns)
+
+theme_set(theme_light())
+
+# Prix 
+frns %>% 
+  group_by(appareils) %>% 
+  summarise(prix_moyen = mean(prix, na.rm = TRUE),
+            prix_median = median(prix),
+            prix_min = min (prix),
+            prix_max = max(prix))
+
+frns %>% 
+  group_by(appareils) %>% 
+  mutate(prix_median = median(prix)) %>%
+  ungroup() %>%
+  ggplot(aes(x = fct_reorder(appareils, prix_median), y = prix, color = appareils)) +
+  ggdist::stat_halfeye(aes(fill = after_scale(colorspace::lighten(color, .5))), 
+                        shape = 18,
+                       point_size = 3,
+                       interval_size = 1.8,
+                       adjust = .5,
+                       .width = c(0, 1)) +
+  geom_text(aes(y = prix_median, label = format(round(prix_median, 2), big.mark = " ")),
+    stat = "unique",
+    family = "Open Sans",
+    size = 2.4,
+    nudge_x = .35)+
+  scale_y_continuous(labels = scales::unit_format(unit = "Ariary")) +
+  coord_flip(xlim = NULL, ylim = NULL, expand = TRUE, clip = "on") +
+  theme(panel.grid.major.x = element_line(size = .35),
+    panel.grid.major.y = element_blank(),
+    legend.position="none") +
+  labs(title = "Distribution des prix par type d'appareil",
+       x = "Appareil de cuisson")
+  
+
+
+# Puissance
+
+frns %>%
+  group_by(appareils) %>% 
+  mutate(p_median = median(p_mean)) %>%
+  ungroup() %>%
+  ggplot(aes(x = fct_reorder(appareils, p_median), y = p_mean, color = appareils)) +
+  ggdist::stat_halfeye(aes(fill = after_scale(colorspace::lighten(color, .5))),
+                       shape = 18, 
+                       point_size = 3,
+                       interval_size = 1.8,
+                       adjust = .5,
+                       .width = c(0, 1)) +
+  scale_y_continuous(labels = scales::unit_format(unit = "W"), breaks = scales::pretty_breaks()) +
+  coord_flip(xlim = NULL, ylim = NULL, expand = TRUE, clip = "on") +
+  theme(panel.grid.major.x = element_line(size = .35),
+    panel.grid.major.y = element_blank(),
+    legend.position="none") +
+  labs(title = "Distribution des puissances par type d'appareil",
+       x = "Appareil de cuisson",
+       y = "puissance minimale")
+  
+
+# Appareils avec Etiquettes énergétiques
+frns %>% 
+  filter(etiquette_energetique == "OUI") %>% 
+  gt()
+
+
+type <- tibble(types = unique(frns$appareils))
+
+# write_excel_csv(type, here::here("electricity", "type.csv"))
+
+frns %>% 
+  group_by(nom_du_magasin) %>% 
+  count(marques) %>% 
+  ggplot(aes(x = fct_reorder(marques,n), y = n, fill = nom_du_magasin)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "marques des appareils", 
+       fill = "nom du magasin") +
+  theme(panel.grid.major.x = element_line(size = .35),
+    panel.grid.major.y = element_blank())
+
+
+# 
+
+
+```
+
+
+
